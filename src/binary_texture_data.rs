@@ -1,4 +1,4 @@
-pub const ALL_TEXTURES: [i32; 32 * 32 * 4] = [
+pub const BINARY_TEXTURES: [i32; 32 * 32 * 4] = [
     //all 32x32 textures
     //Checkerboard
     0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,

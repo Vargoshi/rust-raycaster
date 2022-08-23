@@ -32,10 +32,11 @@ use std::time::Instant;
 const SCREEN_WIDTH: u32 = 120;
 const SCREEN_HEIGHT: u32 = 80;
 
-const PI: f32 = 3.1415926535;
+use std::f32::consts::PI;
+
 const P2: f32 = PI / 2.0;
 const P3: f32 = 3.0 * PI / 2.0;
-const DR: f32 = 0.0174533;
+const DR: f32 = 0.017_453_3;
 const TILE_SIZE: usize = 64;
 
 struct Map {
@@ -73,7 +74,7 @@ fn dist(ax: f32, ay: f32, bx: f32, by: f32, _ang: f32) -> f32 {
 }
 
 fn draw_pixel(red: u8, green: u8, blue: u8, x: i32, y: i32, frame: &mut [u8]) {
-    frame[((y * SCREEN_WIDTH as i32 + x) as usize * 4) + 0] = red; //red
+    frame[((y * SCREEN_WIDTH as i32 + x) as usize * 4)] = red; //red
     frame[((y * SCREEN_WIDTH as i32 + x) as usize * 4) + 1] = green; //green
     frame[((y * SCREEN_WIDTH as i32 + x) as usize * 4) + 2] = blue; //blue
     frame[((y * SCREEN_WIDTH as i32 + x) as usize * 4) + 3] = 255; //alpha
@@ -250,7 +251,7 @@ fn main() -> Result<(), String> {
                     fade += 0.0005 * (fps) as f32;
                 }
                 screen(1, fade, pixels.get_frame());
-                timer += 1 * fps;
+                timer += fps;
                 if timer > 3000 {
                     timer = 0;
                     game_state = 2;
@@ -283,7 +284,7 @@ fn main() -> Result<(), String> {
                     depth,
                     &mut game_state,
                     fps,
-                    &mut map1,
+                    &map1,
                     pixels.get_frame(),
                 );
                 draw_sprite(
@@ -292,7 +293,7 @@ fn main() -> Result<(), String> {
                     depth,
                     &mut game_state,
                     fps,
-                    &mut map1,
+                    &map1,
                     pixels.get_frame(),
                 );
                 draw_sprite(
@@ -301,7 +302,7 @@ fn main() -> Result<(), String> {
                     depth,
                     &mut game_state,
                     fps,
-                    &mut map1,
+                    &map1,
                     pixels.get_frame(),
                 );
                 draw_sprite(
@@ -310,7 +311,7 @@ fn main() -> Result<(), String> {
                     depth,
                     &mut game_state,
                     fps,
-                    &mut map1,
+                    &map1,
                     pixels.get_frame(),
                 );
             }
@@ -320,7 +321,7 @@ fn main() -> Result<(), String> {
                     fade += 0.0005 * (fps) as f32;
                 }
                 screen(2, fade, pixels.get_frame());
-                timer += 1 * fps;
+                timer += fps;
                 if timer > 3000 {
                     fade = 0.0;
                     timer = 0;
@@ -330,7 +331,7 @@ fn main() -> Result<(), String> {
 
             if game_state == 4 {
                 screen(3, fade, pixels.get_frame());
-                timer += 1 * fps;
+                timer += fps;
                 if timer > 3000 {
                     fade = 0.0;
                     timer = 0;
@@ -345,18 +346,10 @@ fn main() -> Result<(), String> {
 
 fn door_open(player: &Player, map1: &mut Map, sprite: &mut Sprite) {
     if sprite.state == 0 {
-        let x_offset;
-        if player.angle.cos() < 0.0 {
-            x_offset = -25;
-        } else {
-            x_offset = 25;
-        }
-        let y_offset;
-        if player.angle.sin() < 0.0 {
-            y_offset = -25;
-        } else {
-            y_offset = 25;
-        }
+        let x_offset = if player.angle.cos() < 0.0 { -25 } else { 25 };
+
+        let y_offset = if player.angle.sin() < 0.0 { -25 } else { 25 };
+
         let ipx_add_xo = (player.x as i32 + x_offset) / 64;
         let ipy_add_yo = (player.y as i32 + y_offset) / 64;
         if map1.wall_tiles[(ipy_add_yo * map1.width + ipx_add_xo) as usize] == 4 {
@@ -366,19 +359,9 @@ fn door_open(player: &Player, map1: &mut Map, sprite: &mut Sprite) {
 }
 
 fn keyboard_input(keys: &Keyboard, player: &mut Player, fps: u128, map: &Map) {
-    let x_offset;
-    if player.angle.cos() < 0.0 {
-        x_offset = -20;
-    } else {
-        x_offset = 20;
-    }
+    let x_offset = if player.angle.cos() < 0.0 { -20 } else { 20 };
 
-    let y_offset;
-    if player.angle.sin() < 0.0 {
-        y_offset = -20;
-    } else {
-        y_offset = 20;
-    }
+    let y_offset = if player.angle.sin() < 0.0 { -20 } else { 20 };
 
     let ipx = player.x / 64.0;
     let ipx_add_xo = (player.x as i32 + x_offset) / 64;
@@ -387,7 +370,7 @@ fn keyboard_input(keys: &Keyboard, player: &mut Player, fps: u128, map: &Map) {
     let ipy_add_yo = (player.y as i32 + y_offset) / 64;
     let ipy_sub_yo = (player.y as i32 - y_offset) / 64;
 
-    if keys.up == true {
+    if keys.up {
         // move the player forward.
 
         if map.wall_tiles[(ipy as i32 * map.width + ipx_add_xo) as usize] == 0 {
@@ -398,7 +381,7 @@ fn keyboard_input(keys: &Keyboard, player: &mut Player, fps: u128, map: &Map) {
             player.y += player.angle.sin() * 0.2 * fps as f32;
         }
     }
-    if keys.down == true {
+    if keys.down {
         // move the player backward.
         if map.wall_tiles[(ipy as i32 * map.width + ipx_sub_xo) as usize] == 0 {
             player.x -= player.angle.cos() * 0.2 * fps as f32;
@@ -408,14 +391,14 @@ fn keyboard_input(keys: &Keyboard, player: &mut Player, fps: u128, map: &Map) {
             player.y -= player.angle.sin() * 0.2 * fps as f32;
         }
     }
-    if keys.left == true {
+    if keys.left {
         // turn the player to the left.
         player.angle -= ((0.2 * fps as f32) * PI) / 180.0;
         if player.angle < 0.0 {
             player.angle += 2.0 * PI;
         }
     }
-    if keys.right == true {
+    if keys.right {
         // turn the player to the right.
         player.angle += ((0.2 * fps as f32) * PI) / 180.0;
         if player.angle > 2.0 * PI {
@@ -432,9 +415,9 @@ fn draw_sky(player: &Player, frame: &mut [u8]) {
                 x_offset += 120;
             }
 
-            x_offset = x_offset % 120;
+            x_offset %= 120;
             let pixel = ((y * 120 + x_offset) * 3) as usize;
-            let red = SKY_DATA[pixel + 0];
+            let red = SKY_DATA[pixel];
             let green = SKY_DATA[pixel + 1];
             let blue = SKY_DATA[pixel + 2];
 
@@ -448,19 +431,19 @@ fn screen(screen_number: i32, fade: f32, frame: &mut [u8]) {
         for x in 0..120 {
             let pixel = (((y * 120) + x) * 3) as usize;
             if screen_number == 1 {
-                let red = (TITLE[pixel + 0] as f32 * fade) as u8;
+                let red = (TITLE[pixel] as f32 * fade) as u8;
                 let green = (TITLE[pixel + 1] as f32 * fade) as u8;
                 let blue = (TITLE[pixel + 2] as f32 * fade) as u8;
                 draw_pixel(red, green, blue, x as i32, y as i32, frame);
             }
             if screen_number == 2 {
-                let red = (WON[pixel + 0] as f32 * fade) as u8;
+                let red = (WON[pixel] as f32 * fade) as u8;
                 let green = (WON[pixel + 1] as f32 * fade) as u8;
                 let blue = (WON[pixel + 2] as f32 * fade) as u8;
                 draw_pixel(red, green, blue, x as i32, y as i32, frame);
             }
             if screen_number == 3 {
-                let red = (LOST[pixel + 0] as f32 * fade) as u8;
+                let red = (LOST[pixel] as f32 * fade) as u8;
                 let green = (LOST[pixel + 1] as f32 * fade) as u8;
                 let blue = (LOST[pixel + 2] as f32 * fade) as u8;
                 draw_pixel(red, green, blue, x as i32, y as i32, frame);
@@ -550,7 +533,7 @@ fn draw_rays(player: &Player, map: &Map, frame: &mut [u8], depth: &mut [i32; 120
             y_offset = -x_offset * negative_tan;
         }
 
-        if ray_angle < P2 || ray_angle > P3 {
+        if !(P2..=P3).contains(&ray_angle) {
             ray_x = ((player.x as i32 >> 6) << 6) as f32 + 64.0;
             ray_y = (player.x - ray_x) * negative_tan + player.y;
             x_offset = 64.0;
@@ -607,7 +590,7 @@ fn draw_rays(player: &Player, map: &Map, frame: &mut [u8], depth: &mut [i32; 120
             fixed_angle -= 2.0 * PI;
         }
 
-        distance = distance * fixed_angle.cos();
+        distance *= fixed_angle.cos();
 
         let mut line_h = ((TILE_SIZE * 80) as f32 / distance) as i32;
 
@@ -642,7 +625,7 @@ fn draw_rays(player: &Player, map: &Map, frame: &mut [u8], depth: &mut [i32; 120
         for y in 0..line_h {
             let pixel = ((texture_y as usize) * 32 + (texture_x) as usize) * 3
                 + (hmt as usize * 32 * 32 * 3);
-            let red = (RGB_TEXTURES[pixel + 0] as f32 * shade) as u8;
+            let red = (RGB_TEXTURES[pixel] as f32 * shade) as u8;
             let green = (RGB_TEXTURES[pixel + 1] as f32 * shade) as u8;
             let blue = (RGB_TEXTURES[pixel + 2] as f32 * shade) as u8;
 
@@ -680,7 +663,7 @@ fn draw_rays(player: &Player, map: &Map, frame: &mut [u8], depth: &mut [i32; 120
             let pixel = (((((texture_y as usize) & 31) * 32) + ((texture_x as usize) & 31))
                 + mp as usize)
                 * 3;
-            let red = (RGB_TEXTURES[pixel + 0] as f32 * 0.7) as u8;
+            let red = (RGB_TEXTURES[pixel] as f32 * 0.7) as u8;
             let green = (RGB_TEXTURES[pixel + 1] as f32 * 0.7) as u8;
             let blue = (RGB_TEXTURES[pixel + 2] as f32 * 0.7) as u8;
             draw_pixel(red, green, blue, r, y, frame);
@@ -694,7 +677,7 @@ fn draw_rays(player: &Player, map: &Map, frame: &mut [u8], depth: &mut [i32; 120
             let pixel = (((((texture_y as usize) & 31) * 32) + ((texture_x as usize) & 31))
                 + mp as usize)
                 * 3;
-            let red = RGB_TEXTURES[pixel + 0];
+            let red = RGB_TEXTURES[pixel];
             let green = RGB_TEXTURES[pixel + 1];
             let blue = RGB_TEXTURES[pixel + 2];
             if mp > 0 {
@@ -797,17 +780,15 @@ fn draw_sprite(
             if x > 0 && x < 120 && (depth[x as usize] > b as i32 && sprite.state == 1) {
                 let pixel = ((texture_y as usize) * 32 + (texture_x) as usize) * 3
                     + sprite.map as usize * 32 * 32 * 3;
-                let red = SPRITES[pixel + 0];
+                let red = SPRITES[pixel];
                 let green = SPRITES[pixel + 1];
                 let blue = SPRITES[pixel + 2];
 
                 let draw_x = x;
                 let draw_y = (sy as i32) - (y);
 
-                if draw_y > 0 && draw_y < 80 {
-                    if !(red == 255 && green == 0 && blue == 255) {
-                        draw_pixel(red, green, blue, draw_x, draw_y, frame);
-                    }
+                if draw_y > 0 && draw_y < 80 && !(red == 255 && green == 0 && blue == 255) {
+                    draw_pixel(red, green, blue, draw_x, draw_y, frame);
                 }
                 texture_y -= texture_y_step;
                 if texture_y < 0.0 {

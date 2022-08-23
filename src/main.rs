@@ -1,4 +1,13 @@
-extern crate sdl2;
+#![deny(clippy::all)]
+#![forbid(unsafe_code)]
+
+use log::error;
+use pixels::{Pixels, SurfaceTexture};
+use winit::dpi::LogicalSize;
+use winit::event::{Event, VirtualKeyCode};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::WindowBuilder;
+use winit_input_helper::WinitInputHelper;
 
 pub mod rgb_texture_data;
 use crate::rgb_texture_data::RGB_TEXTURES;
@@ -20,15 +29,8 @@ use crate::sprites::SPRITES;
 
 use std::time::Instant;
 
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-
-use sdl2::pixels;
-
-use sdl2::rect::Rect;
-
-const SCREEN_WIDTH: u32 = 960;
-const SCREEN_HEIGHT: u32 = 640;
+const SCREEN_WIDTH: u32 = 120;
+const SCREEN_HEIGHT: u32 = 80;
 
 const PI: f32 = 3.1415926535;
 const P2: f32 = PI / 2.0;
@@ -68,6 +70,13 @@ struct Keyboard {
 
 fn dist(ax: f32, ay: f32, bx: f32, by: f32, _ang: f32) -> f32 {
     ((bx - ax) * (bx - ax) + (by - ay) * (by - ay)).sqrt()
+}
+
+fn draw_pixel(red: u8, green: u8, blue: u8, x: i32, y: i32, frame: &mut [u8]) {
+    frame[((y * SCREEN_WIDTH as i32 + x) as usize * 4) + 0] = red; //red
+    frame[((y * SCREEN_WIDTH as i32 + x) as usize * 4) + 1] = green; //green
+    frame[((y * SCREEN_WIDTH as i32 + x) as usize * 4) + 2] = blue; //blue
+    frame[((y * SCREEN_WIDTH as i32 + x) as usize * 4) + 3] = 255; //alpha
 }
 
 fn main() -> Result<(), String> {
@@ -141,187 +150,197 @@ fn main() -> Result<(), String> {
 
     let time = Instant::now();
     let mut frame1 = 0;
-    let mut frame2;
-    let mut fps;
 
     let mut game_state = 0;
     let mut timer = 0;
     let mut fade = 0.0;
 
-    let sdl_context = sdl2::init()?;
-    let video_subsys = sdl_context.video()?;
-    let window = video_subsys
-        .window("Raycaster", SCREEN_WIDTH, SCREEN_HEIGHT)
-        .position_centered()
-        .opengl()
-        .build()
-        .map_err(|e| e.to_string())?;
+    env_logger::init();
+    let event_loop = EventLoop::new();
+    let mut input = WinitInputHelper::new();
+    let window = {
+        let size = LogicalSize::new(640, 400);
+        WindowBuilder::new()
+            .with_title("Raycaster")
+            .with_inner_size(size)
+            .with_min_inner_size(size)
+            .with_resizable(false)
+            .build(&event_loop)
+            .unwrap()
+    };
 
-    let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
+    let mut pixels = {
+        let window_size = window.inner_size();
+        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
+        Pixels::new(SCREEN_WIDTH, SCREEN_HEIGHT, surface_texture).unwrap()
+    };
 
-    let mut events = sdl_context.event_pump()?;
+    event_loop.run(move |event, _, control_flow| {
+        // Draw the current frame
+        if let Event::RedrawRequested(_) = event {
+            if pixels
+                .render()
+                .map_err(|e| error!("pixels.render() failed: {}", e))
+                .is_err()
+            {
+                *control_flow = ControlFlow::Exit;
+                return;
+            }
+        }
 
-    'main: loop {
-        for event in events.poll_iter() {
-            match event {
-                Event::Quit { .. } => break 'main,
+        // Handle input events
+        if input.update(&event) {
+            // Close events
+            if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
+                *control_flow = ControlFlow::Exit;
+                return;
+            }
 
-                Event::KeyDown {
-                    keycode: Some(keycode),
-                    ..
-                } => {
-                    if keycode == Keycode::Escape {
-                        break 'main;
-                    }
-                    if keycode == Keycode::Left {
-                        keys.left = true;
-                    }
-                    if keycode == Keycode::Right {
-                        keys.right = true;
-                    }
-                    if keycode == Keycode::Up {
-                        keys.up = true;
-                    }
-                    if keycode == Keycode::Down {
-                        keys.down = true;
-                    }
-                    if keycode == Keycode::E {
-                        door_open(&player1, &mut map1, &mut sprite1);
-                    }
+            if let Some(size) = input.window_resized() {
+                pixels.resize_surface(size.width, size.height);
+            }
+
+            if input.key_pressed(VirtualKeyCode::Left) {
+                keys.left = true;
+            }
+
+            if input.key_pressed(VirtualKeyCode::Right) {
+                keys.right = true;
+            }
+
+            if input.key_pressed(VirtualKeyCode::Up) {
+                keys.up = true;
+            }
+
+            if input.key_pressed(VirtualKeyCode::Down) {
+                keys.down = true;
+            }
+
+            if input.key_pressed(VirtualKeyCode::E) {
+                door_open(&player1, &mut map1, &mut sprite1);
+            }
+
+            if input.key_released(VirtualKeyCode::Left) {
+                keys.left = false;
+            }
+
+            if input.key_released(VirtualKeyCode::Right) {
+                keys.right = false;
+            }
+
+            if input.key_released(VirtualKeyCode::Up) {
+                keys.up = false;
+            }
+
+            if input.key_released(VirtualKeyCode::Down) {
+                keys.down = false;
+            }
+
+            let frame2 = time.elapsed().as_millis();
+            let fps = frame2 - frame1;
+            frame1 = time.elapsed().as_millis();
+
+            if game_state == 0 {
+                fade = 0.0;
+                timer = 0;
+                game_state = 1;
+            }
+            if game_state == 1 {
+                if fade < 1.0 {
+                    fade += 0.0005 * (fps) as f32;
                 }
-                Event::KeyUp {
-                    keycode: Some(keycode),
-                    ..
-                } => {
-                    if keycode == Keycode::Left {
-                        keys.left = false;
-                    }
-                    if keycode == Keycode::Right {
-                        keys.right = false;
-                    }
-                    if keycode == Keycode::Up {
-                        keys.up = false;
-                    }
-                    if keycode == Keycode::Down {
-                        keys.down = false;
-                    }
+                screen(1, fade, pixels.get_frame());
+                timer += 1 * fps;
+                if timer > 3000 {
+                    timer = 0;
+                    game_state = 2;
                 }
-                _ => {}
+
+                player1.x = 300.0;
+                player1.y = 300.0;
+                player1.angle = 0.0;
+                sprite4.x = 2.5 * 64.0;
+                sprite4.y = 2.0 * 64.0;
+                sprite1.state = 1;
+                map1.wall_tiles[19] = 4;
+                map1.wall_tiles[26] = 4;
             }
+            if game_state == 2 {
+                keyboard_input(&keys, &mut player1, fps, &map1);
+
+                draw_sky(&player1, pixels.get_frame());
+                draw_rays(&player1, &map1, pixels.get_frame(), &mut depth);
+
+                if (player1.x as i32 >> 6) == 1 && (player1.y as i32 >> 6) == 1 {
+                    fade = 0.0;
+                    timer = 0;
+                    game_state = 3;
+                }
+
+                draw_sprite(
+                    &mut sprite1,
+                    &player1,
+                    depth,
+                    &mut game_state,
+                    fps,
+                    &mut map1,
+                    pixels.get_frame(),
+                );
+                draw_sprite(
+                    &mut sprite2,
+                    &player1,
+                    depth,
+                    &mut game_state,
+                    fps,
+                    &mut map1,
+                    pixels.get_frame(),
+                );
+                draw_sprite(
+                    &mut sprite3,
+                    &player1,
+                    depth,
+                    &mut game_state,
+                    fps,
+                    &mut map1,
+                    pixels.get_frame(),
+                );
+                draw_sprite(
+                    &mut sprite4,
+                    &player1,
+                    depth,
+                    &mut game_state,
+                    fps,
+                    &mut map1,
+                    pixels.get_frame(),
+                );
+            }
+
+            if game_state == 3 {
+                if fade < 1.0 {
+                    fade += 0.0005 * (fps) as f32;
+                }
+                screen(2, fade, pixels.get_frame());
+                timer += 1 * fps;
+                if timer > 3000 {
+                    fade = 0.0;
+                    timer = 0;
+                    game_state = 0;
+                }
+            }
+
+            if game_state == 4 {
+                screen(3, fade, pixels.get_frame());
+                timer += 1 * fps;
+                if timer > 3000 {
+                    fade = 0.0;
+                    timer = 0;
+                    game_state = 0;
+                }
+            }
+
+            window.request_redraw();
         }
-
-        frame2 = time.elapsed().as_millis();
-        fps = frame2 - frame1;
-        frame1 = time.elapsed().as_millis();
-
-        if game_state == 0 {
-            fade = 0.0;
-            timer = 0;
-            game_state = 1;
-        }
-        if game_state == 1 {
-            if fade < 1.0 {
-                fade += 0.0005 * (fps) as f32;
-            }
-            screen(1, fade, &mut canvas)?;
-            timer += 1 * fps;
-            if timer > 3000 {
-                timer = 0;
-                game_state = 2;
-            }
-
-            player1.x = 300.0;
-            player1.y = 300.0;
-            player1.angle = 0.0;
-            sprite4.x = 2.5 * 64.0;
-            sprite4.y = 2.0 * 64.0;
-            sprite1.state = 1;
-            map1.wall_tiles[19] = 4;
-            map1.wall_tiles[26] = 4;
-        }
-        if game_state == 2 {
-            keyboard_input(&keys, &mut player1, fps, &map1);
-
-            canvas.set_draw_color(pixels::Color::RGB(0, 0, 0));
-            canvas.clear();
-
-            draw_sky(&player1, &mut canvas)?;
-            draw_rays(&player1, &map1, &mut canvas, &mut depth)?;
-
-            if (player1.x as i32 >> 6) == 1 && (player1.y as i32 >> 6) == 1 {
-                fade = 0.0;
-                timer = 0;
-                game_state = 3;
-            }
-
-            draw_sprite(
-                &mut sprite1,
-                &player1,
-                depth,
-                &mut game_state,
-                fps,
-                &mut map1,
-                &mut canvas,
-            )?;
-            draw_sprite(
-                &mut sprite2,
-                &player1,
-                depth,
-                &mut game_state,
-                fps,
-                &mut map1,
-                &mut canvas,
-            )?;
-            draw_sprite(
-                &mut sprite3,
-                &player1,
-                depth,
-                &mut game_state,
-                fps,
-                &mut map1,
-                &mut canvas,
-            )?;
-            draw_sprite(
-                &mut sprite4,
-                &player1,
-                depth,
-                &mut game_state,
-                fps,
-                &mut map1,
-                &mut canvas,
-            )?;
-        }
-
-        if game_state == 3 {
-            if fade < 1.0 {
-                fade += 0.0005 * (fps) as f32;
-            }
-            screen(2, fade, &mut canvas)?;
-            timer += 1 * fps;
-            if timer > 3000 {
-                fade = 0.0;
-                timer = 0;
-                game_state = 0;
-            }
-        }
-
-        if game_state == 4 {
-            if fade < 1.0 {
-                fade += 0.0005 * (fps) as f32;
-            }
-            screen(3, fade, &mut canvas)?;
-            timer += 1 * fps;
-            if timer > 3000 {
-                fade = 0.0;
-                timer = 0;
-                game_state = 0;
-            }
-        }
-
-        canvas.present();
-    }
-
-    Ok(())
+    });
 }
 
 fn door_open(player: &Player, map1: &mut Map, sprite: &mut Sprite) {
@@ -405,10 +424,7 @@ fn keyboard_input(keys: &Keyboard, player: &mut Player, fps: u128, map: &Map) {
     }
 }
 
-fn draw_sky(
-    player: &Player,
-    canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
-) -> Result<(), String> {
+fn draw_sky(player: &Player, frame: &mut [u8]) {
     for y in 0..40 {
         for x in 0..120 {
             let mut x_offset = ((player.angle * (180.0 / PI)) * 2.0) as i32 + x;
@@ -421,19 +437,13 @@ fn draw_sky(
             let red = SKY_DATA[pixel + 0];
             let green = SKY_DATA[pixel + 1];
             let blue = SKY_DATA[pixel + 2];
-            canvas.set_draw_color(pixels::Color::RGB(red, green, blue));
-            //canvas.draw_point(Point::new(x as i32 * 8, y as i32 * 8))?;
-            canvas.fill_rect(Rect::new(120 + (x as i32 * 6), 80 + (y as i32 * 6), 6, 6))?;
+
+            draw_pixel(red, green, blue, x as i32, y as i32, frame);
         }
     }
-    Ok(())
 }
 
-fn screen(
-    screen_number: i32,
-    fade: f32,
-    canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
-) -> Result<(), String> {
+fn screen(screen_number: i32, fade: f32, frame: &mut [u8]) {
     for y in 0..80 {
         for x in 0..120 {
             let pixel = (((y * 120) + x) * 3) as usize;
@@ -441,38 +451,29 @@ fn screen(
                 let red = (TITLE[pixel + 0] as f32 * fade) as u8;
                 let green = (TITLE[pixel + 1] as f32 * fade) as u8;
                 let blue = (TITLE[pixel + 2] as f32 * fade) as u8;
-                canvas.set_draw_color(pixels::Color::RGB(red, green, blue));
-                canvas.fill_rect(Rect::new(120 + (x as i32 * 6), 80 + (y as i32 * 6), 6, 6))?;
+                draw_pixel(red, green, blue, x as i32, y as i32, frame);
             }
             if screen_number == 2 {
                 let red = (WON[pixel + 0] as f32 * fade) as u8;
                 let green = (WON[pixel + 1] as f32 * fade) as u8;
                 let blue = (WON[pixel + 2] as f32 * fade) as u8;
-                canvas.set_draw_color(pixels::Color::RGB(red, green, blue));
-                canvas.fill_rect(Rect::new(120 + (x as i32 * 6), 80 + (y as i32 * 6), 6, 6))?;
+                draw_pixel(red, green, blue, x as i32, y as i32, frame);
             }
             if screen_number == 3 {
                 let red = (LOST[pixel + 0] as f32 * fade) as u8;
                 let green = (LOST[pixel + 1] as f32 * fade) as u8;
                 let blue = (LOST[pixel + 2] as f32 * fade) as u8;
-                canvas.set_draw_color(pixels::Color::RGB(red, green, blue));
-                canvas.fill_rect(Rect::new(120 + (x as i32 * 6), 80 + (y as i32 * 6), 6, 6))?;
+                draw_pixel(red, green, blue, x as i32, y as i32, frame);
             }
         }
     }
-    Ok(())
 }
 
 /// Cast the rays and draws the 3D view.
 ///
 /// Raycasting algorithm is based on [Tutorial by 3DSage](https://youtu.be/gYRrGTC7GtA?list=PLMTDxt7L_MNXx7QP80seZUfcSoJ4jl34D&t=404).
 ///
-fn draw_rays(
-    player: &Player,
-    map: &Map,
-    canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
-    depth: &mut [i32; 120],
-) -> Result<(), String> {
+fn draw_rays(player: &Player, map: &Map, frame: &mut [u8], depth: &mut [i32; 120]) {
     let mut mx;
     let mut my;
     let mut mp;
@@ -623,8 +624,7 @@ fn draw_rays(
         depth[r as usize] = distance as i32;
 
         // Drawing walls
-        let mut texture_y: f32 = texture_y_offset * texture_y_step; //+ hmt as f32 * 32.0;
-
+        let mut texture_y: f32 = texture_y_offset * texture_y_step;
         let mut texture_x: f32;
 
         if shade == 1.0 {
@@ -645,9 +645,8 @@ fn draw_rays(
             let red = (RGB_TEXTURES[pixel + 0] as f32 * shade) as u8;
             let green = (RGB_TEXTURES[pixel + 1] as f32 * shade) as u8;
             let blue = (RGB_TEXTURES[pixel + 2] as f32 * shade) as u8;
-            canvas.set_draw_color(pixels::Color::RGB(red, green, blue));
-            //canvas.draw_point(Point::new(r * 8, (y + line_offset) * 8))?;
-            canvas.fill_rect(Rect::new(120 + (r * 6), 80 + ((y + line_offset) * 6), 6, 6))?;
+
+            draw_pixel(red, green, blue, r, y + line_offset, frame);
 
             texture_y += texture_y_step;
         }
@@ -684,9 +683,7 @@ fn draw_rays(
             let red = (RGB_TEXTURES[pixel + 0] as f32 * 0.7) as u8;
             let green = (RGB_TEXTURES[pixel + 1] as f32 * 0.7) as u8;
             let blue = (RGB_TEXTURES[pixel + 2] as f32 * 0.7) as u8;
-            canvas.set_draw_color(pixels::Color::RGB(red, green, blue));
-            //canvas.draw_point(Point::new(r * 8, y * 8))?;
-            canvas.fill_rect(Rect::new(120 + (r * 6), 80 + (y * 6), 6, 6))?;
+            draw_pixel(red, green, blue, r, y, frame);
 
             // Drawing ceiling
             let mp = map.ceiling_tiles
@@ -701,9 +698,7 @@ fn draw_rays(
             let green = RGB_TEXTURES[pixel + 1];
             let blue = RGB_TEXTURES[pixel + 2];
             if mp > 0 {
-                canvas.set_draw_color(pixels::Color::RGB(red, green, blue));
-                //canvas.draw_point(Point::new(r * 8, (80 - y) * 8))?;
-                canvas.fill_rect(Rect::new(120 + (r * 6), 80 + ((80 - y) * 6), 6, 6))?;
+                draw_pixel(red, green, blue, r, 80 - y, frame);
             }
         }
 
@@ -716,7 +711,6 @@ fn draw_rays(
             ray_angle -= 2.0 * PI;
         }
     }
-    Ok(())
 }
 
 fn draw_sprite(
@@ -726,8 +720,8 @@ fn draw_sprite(
     game_state: &mut i32,
     fps: u128,
     map: &Map,
-    canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
-) -> Result<(), String> {
+    frame: &mut [u8],
+) {
     if player.x < (sprite.x + 30.0)
         && player.x > (sprite.x - 30.0)
         && player.y < (sprite.y + 30.0)
@@ -807,13 +801,12 @@ fn draw_sprite(
                 let green = SPRITES[pixel + 1];
                 let blue = SPRITES[pixel + 2];
 
-                let draw_x = 120 + (x * 6);
-                let draw_y = 80 + (sy as i32 * 6) - (y * 6);
+                let draw_x = x;
+                let draw_y = (sy as i32) - (y);
 
-                if draw_y > 80 && draw_y < 560 {
+                if draw_y > 0 && draw_y < 80 {
                     if !(red == 255 && green == 0 && blue == 255) {
-                        canvas.set_draw_color(pixels::Color::RGB(red, green, blue));
-                        canvas.fill_rect(Rect::new(draw_x, draw_y, 6, 6))?;
+                        draw_pixel(red, green, blue, draw_x, draw_y, frame);
                     }
                 }
                 texture_y -= texture_y_step;
@@ -824,6 +817,4 @@ fn draw_sprite(
         }
         texture_x += texture_x_step;
     }
-
-    Ok(())
 }

@@ -71,6 +71,8 @@ fn dist(ax: f32, ay: f32, bx: f32, by: f32, _ang: f32) -> f32 {
 }
 
 fn main() -> Result<(), String> {
+    let one = 1;
+
     let mut map1 = Map {
         width: 8,
         height: 8,
